@@ -4,7 +4,6 @@ import {
   Client as TS3FullClient,
   clientMove as tsClientMove,
   listChannels as tsListChannels,
-  listClients as tsListClients,
   poke as tsPoke,
   sendTextMessage as tsSendTextMessage,
   generateIdentity,
@@ -153,7 +152,7 @@ export class TSClient extends EventEmitter {
     try {
       const [channels, clients] = await Promise.all([
         tsListChannels(client),
-        tsListClients(client),
+        listDirectoryClients(client),
       ]);
       this.emit("directorySnapshot", { channels, clients });
     } catch (error: unknown) {
@@ -191,7 +190,7 @@ export class TSClient extends EventEmitter {
     const client = this.client;
     if (!client || !this.connected) return;
     try {
-      const clients = await tsListClients(client);
+      const clients = await listDirectoryClients(client);
       if (this.client === client && this.connected) this.emit("directoryClientsSnapshot", clients);
     } catch (error: unknown) {
       if (this.client === client && this.connected) this.logger.warn({ err: error instanceof Error ? error.message : String(error) }, "Could not refresh TeamSpeak member statuses");
@@ -419,6 +418,36 @@ export class TSClient extends EventEmitter {
       this.clientId = 0;
     }
   }
+}
+
+async function listDirectoryClients(client: Pick<TS3FullClient, "execCommandWithResponse">): Promise<DirectoryClientInfo[]> {
+  // The pinned SDK's listClients drops optional status fields even though it
+  // requests them. Read the decoded protocol rows so initial and refreshed
+  // directory snapshots retain the server's actual presence/audio state.
+  const rows = await client.execCommandWithResponse("clientlist -uid -away -voice -groups", 5_000);
+  return rows.map((row) => {
+    const member: DirectoryClientInfo = {
+      id: parseInt(row.clid ?? "0", 10),
+      nickname: row.client_nickname ?? "",
+      uid: row.client_unique_identifier ?? "",
+      channelID: BigInt(row.cid ?? "0"),
+      type: parseInt(row.client_type ?? "0", 10),
+      serverGroups: row.client_servergroups ? row.client_servergroups.split(",") : [],
+    };
+    for (const [field, protocolField] of [
+      ["away", "client_away"],
+      ["inputMuted", "client_input_muted"],
+      ["outputMuted", "client_output_muted"],
+      ["channelCommander", "client_is_channel_commander"],
+    ] as const) {
+      const value = row[protocolField];
+      // Missing status is unknown, not online/unmuted; omit it to preserve any
+      // state already learned from directory notifications.
+      if (value === "0" || value === "1") member[field] = value === "1";
+    }
+    if (row.client_away_message !== undefined) member.awayMessage = row.client_away_message;
+    return member;
+  });
 }
 
 function escapeTeamSpeakValue(value: string): string {
