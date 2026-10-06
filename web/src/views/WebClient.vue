@@ -244,7 +244,7 @@
       </main>
 
       <aside :class="['member-panel', { 'mobile-section-visible': mobileSection === 'channels' }]" data-ws-part="voice.member-panel">
-        <div class="member-panel-heading" data-ws-part="voice.member-panel.heading"><div><h2>{{ t('people') }}</h2></div><button type="button" class="status-button" :class="{ active: away }" @click="toggleAway"><span class="status-dot"></span>{{ away ? t('away') : t('available') }}</button></div>
+        <div class="member-panel-heading" data-ws-part="voice.member-panel.heading"><div><h2>{{ t('people') }}</h2></div><button type="button" class="status-button" :class="{ active: away }" :title="away ? t('setAvailable') : t('setAway')" :aria-label="`${away ? t('away') : t('available')}: ${away ? t('setAvailable') : t('setAway')}`" @click="toggleManualAway"><span class="status-dot"></span>{{ away ? t('away') : t('available') }}</button></div>
         <div class="member-search" data-ws-part="voice.member-panel.search"><Icon name="search" :size="15" /><input v-model="memberQuery" :placeholder="t('searchMembers')" :aria-label="t('searchMembers')" /></div>
         <div class="member-tree" data-ws-part="voice.member-panel.channels">
           <section v-for="channelItem in filteredMemberChannels" :key="channelItem.id" :class="['member-channel-group', { current: currentChannel?.id === channelItem.id, 'drag-over': dragOverChannelId === channelItem.id }]" data-ws-part="voice.channel-group" :data-ws-state="currentChannel?.id === channelItem.id ? 'current' : dragOverChannelId === channelItem.id ? 'drag-over' : 'idle'" :data-member-channel-id="channelItem.id" :style="{ marginLeft: `${channelItem.depth * 10}px` }" @dragover="onChannelDragOver(channelItem, $event)" @dragleave="onChannelDragLeave(channelItem, $event)" @drop="onChannelDrop(channelItem, $event)" @pointermove="onMemberPointerMove($event)" @pointerup="onMemberPointerUp($event)" @pointercancel="onMemberPointerCancel($event)">
@@ -269,7 +269,7 @@
         <div v-if="isMobileViewport" class="mobile-member-controls" role="toolbar" :aria-label="t('desktopAudioControls')">
           <button type="button" class="mobile-voice-toggle" :class="{ muted: microphoneMuted }" :aria-label="microphoneMuted ? t('unmuteMic') : t('muteMic')" :aria-pressed="!microphoneMuted" @click="toggleMicrophone"><Icon :name="microphoneMuted ? 'mic-off' : 'mic'" :size="20" /><span>{{ microphoneMuted ? t('unmuteMic') : t('muteMic') }}</span></button>
           <button type="button" class="mobile-voice-toggle" :class="{ muted: outputMuted }" :aria-label="outputMuted ? t('unmuteOutput') : t('muteOutput')" :aria-pressed="!outputMuted" @click="toggleOutputMute"><Icon :name="outputMuted ? 'volume-off' : 'volume'" :size="20" /><span>{{ outputMuted ? t('unmuteOutput') : t('muteOutput') }}</span></button>
-          <button type="button" class="mobile-voice-away" :class="{ active: away }" :title="away ? t('available') : t('away')" :aria-label="away ? t('available') : t('away')" :aria-pressed="away" @click="toggleManualAway"><Icon :name="away ? 'clock' : 'check'" :size="18" /></button>
+          <button type="button" class="mobile-voice-away" :class="{ active: away }" :title="away ? t('setAvailable') : t('setAway')" :aria-label="`${away ? t('away') : t('available')}: ${away ? t('setAvailable') : t('setAway')}`" @click="toggleManualAway"><Icon :name="away ? 'clock' : 'check'" :size="18" /><span>{{ away ? t('away') : t('available') }}</span></button>
           <button type="button" class="mobile-member-leave" :aria-label="t('exit')" :title="t('exit')" @click="doDisconnect"><Icon name="door" :size="18" /></button>
         </div>
         <div v-if="!isMobileViewport" class="desktop-audio-dock" data-ws-part="voice.audio-dock" role="toolbar" :aria-label="t('desktopAudioControls')">
@@ -303,7 +303,7 @@
         <button type="button" :class="{ muted: microphoneMuted }" :aria-pressed="!microphoneMuted" @click="toggleMicrophone"><Icon :name="microphoneMuted ? 'mic-off' : 'mic'" :size="18" /> {{ microphoneMuted ? t('unmuteMic') : t('muteMic') }}</button>
         <button type="button" :class="{ muted: outputMuted }" :aria-pressed="!outputMuted" @click="toggleOutputMute"><Icon :name="outputMuted ? 'volume-off' : 'volume'" :size="18" /> {{ outputMuted ? t('unmuteOutput') : t('muteOutput') }}</button>
         <button type="button" @click="settingsOpen = true"><Icon name="settings" :size="18" /> {{ t('audioSettings') }}</button>
-        <button type="button" :class="{ away: away }" :aria-pressed="away" @click="toggleManualAway"><Icon :name="away ? 'clock' : 'check'" :size="18" /> {{ away ? t('available') : t('away') }}</button>
+        <button type="button" :class="{ away: away }" @click="toggleManualAway"><Icon :name="away ? 'check' : 'clock'" :size="18" /> {{ away ? t('setAvailable') : t('setAway') }}</button>
         <SkinSwitcher v-model="activeSkinId" class="mobile-skin-switcher" :menu-label="t('skinSelector')" :options="skinOptions" @change="onSkinChange" />
         <div class="language-menu-row"><Icon name="globe" :size="18" /><span>{{ t('languageMenu') }}</span><LanguageSwitcher v-model="language" :menu-label="t('languageMenu')" @change="persistLanguage" /></div>
         <button type="button" class="danger" @click="doDisconnect"><Icon name="door" :size="18" /> {{ t('exit') }}</button>
@@ -313,7 +313,7 @@
         <div v-if="isMobileViewport && mobileSection === 'voice'" class="mobile-voice-controls" role="toolbar" :aria-label="t('desktopAudioControls')">
           <button type="button" class="mobile-voice-toggle" :class="{ muted: microphoneMuted }" :aria-label="microphoneMuted ? t('unmuteMic') : t('muteMic')" :aria-pressed="!microphoneMuted" @click="toggleMicrophone"><Icon :name="microphoneMuted ? 'mic-off' : 'mic'" :size="18" /><span>{{ microphoneMuted ? t('unmuteMic') : t('muteMic') }}</span></button>
           <button type="button" class="mobile-voice-toggle" :class="{ muted: outputMuted }" :aria-label="outputMuted ? t('unmuteOutput') : t('muteOutput')" :aria-pressed="!outputMuted" @click="toggleOutputMute"><Icon :name="outputMuted ? 'volume-off' : 'volume'" :size="18" /><span>{{ outputMuted ? t('unmuteOutput') : t('muteOutput') }}</span></button>
-          <button type="button" class="mobile-voice-away" :class="{ active: away }" :title="away ? t('available') : t('away')" :aria-label="away ? t('available') : t('away')" :aria-pressed="away" @click="toggleManualAway"><Icon :name="away ? 'clock' : 'check'" :size="18" /></button>
+          <button type="button" class="mobile-voice-away" :class="{ active: away }" :title="away ? t('setAvailable') : t('setAway')" :aria-label="`${away ? t('away') : t('available')}: ${away ? t('setAvailable') : t('setAway')}`" @click="toggleManualAway"><Icon :name="away ? 'clock' : 'check'" :size="18" /><span>{{ away ? t('away') : t('available') }}</span></button>
           <button type="button" class="mobile-voice-leave" :aria-label="t('exit')" :title="t('exit')" @click="doDisconnect"><Icon name="door" :size="17" /></button>
         </div>
         <nav class="mobile-nav" data-ws-part="voice.mobile-nav" :aria-label="t('mobileNavigation')">
