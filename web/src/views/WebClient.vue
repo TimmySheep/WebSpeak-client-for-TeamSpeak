@@ -269,7 +269,7 @@
         <div v-if="isMobileViewport" class="mobile-member-controls" role="toolbar" :aria-label="t('desktopAudioControls')">
           <button type="button" class="mobile-voice-toggle" :class="{ muted: microphoneMuted }" :aria-label="microphoneMuted ? t('unmuteMic') : t('muteMic')" :aria-pressed="!microphoneMuted" @click="toggleMicrophone"><Icon :name="microphoneMuted ? 'mic-off' : 'mic'" :size="20" /><span>{{ microphoneMuted ? t('unmuteMic') : t('muteMic') }}</span></button>
           <button type="button" class="mobile-voice-toggle" :class="{ muted: outputMuted }" :aria-label="outputMuted ? t('unmuteOutput') : t('muteOutput')" :aria-pressed="!outputMuted" @click="toggleOutputMute"><Icon :name="outputMuted ? 'volume-off' : 'volume'" :size="20" /><span>{{ outputMuted ? t('unmuteOutput') : t('muteOutput') }}</span></button>
-          <button type="button" class="mobile-voice-away" :class="{ active: away }" :title="away ? t('available') : t('away')" :aria-label="away ? t('available') : t('away')" :aria-pressed="away" @click="toggleManualAway"><Icon :name="away ? 'clock' : 'check'" :size="18" /></button>
+          <button type="button" class="mobile-voice-away" :class="{ active: away }" :title="away ? t('available') : t('away')" :aria-label="away ? t('available') : t('away')" :aria-pressed="away" @click="toggleManualAway"><Icon :name="away ? 'user-check' : 'user-clock'" :size="20" /></button>
           <button type="button" class="mobile-member-leave" :aria-label="t('exit')" :title="t('exit')" @click="doDisconnect"><Icon name="door" :size="18" /></button>
         </div>
         <div v-if="!isMobileViewport" class="desktop-audio-dock" data-ws-part="voice.audio-dock" role="toolbar" :aria-label="t('desktopAudioControls')">
@@ -303,7 +303,7 @@
         <button type="button" :class="{ muted: microphoneMuted }" :aria-pressed="!microphoneMuted" @click="toggleMicrophone"><Icon :name="microphoneMuted ? 'mic-off' : 'mic'" :size="18" /> {{ microphoneMuted ? t('unmuteMic') : t('muteMic') }}</button>
         <button type="button" :class="{ muted: outputMuted }" :aria-pressed="!outputMuted" @click="toggleOutputMute"><Icon :name="outputMuted ? 'volume-off' : 'volume'" :size="18" /> {{ outputMuted ? t('unmuteOutput') : t('muteOutput') }}</button>
         <button type="button" @click="settingsOpen = true"><Icon name="settings" :size="18" /> {{ t('audioSettings') }}</button>
-        <button type="button" :class="{ away: away }" :aria-pressed="away" @click="toggleManualAway"><Icon :name="away ? 'clock' : 'check'" :size="18" /> {{ away ? t('available') : t('away') }}</button>
+        <button type="button" :class="{ away: away }" :aria-pressed="away" @click="toggleManualAway"><Icon :name="away ? 'user-check' : 'user-clock'" :size="20" /> {{ away ? t('available') : t('away') }}</button>
         <SkinSwitcher v-model="activeSkinId" class="mobile-skin-switcher" :menu-label="t('skinSelector')" :options="skinOptions" @change="onSkinChange" />
         <div class="language-menu-row"><Icon name="globe" :size="18" /><span>{{ t('languageMenu') }}</span><LanguageSwitcher v-model="language" :menu-label="t('languageMenu')" @change="persistLanguage" /></div>
         <button type="button" class="danger" @click="doDisconnect"><Icon name="door" :size="18" /> {{ t('exit') }}</button>
@@ -313,7 +313,7 @@
         <div v-if="isMobileViewport && mobileSection === 'voice'" class="mobile-voice-controls" role="toolbar" :aria-label="t('desktopAudioControls')">
           <button type="button" class="mobile-voice-toggle" :class="{ muted: microphoneMuted }" :aria-label="microphoneMuted ? t('unmuteMic') : t('muteMic')" :aria-pressed="!microphoneMuted" @click="toggleMicrophone"><Icon :name="microphoneMuted ? 'mic-off' : 'mic'" :size="18" /><span>{{ microphoneMuted ? t('unmuteMic') : t('muteMic') }}</span></button>
           <button type="button" class="mobile-voice-toggle" :class="{ muted: outputMuted }" :aria-label="outputMuted ? t('unmuteOutput') : t('muteOutput')" :aria-pressed="!outputMuted" @click="toggleOutputMute"><Icon :name="outputMuted ? 'volume-off' : 'volume'" :size="18" /><span>{{ outputMuted ? t('unmuteOutput') : t('muteOutput') }}</span></button>
-          <button type="button" class="mobile-voice-away" :class="{ active: away }" :title="away ? t('available') : t('away')" :aria-label="away ? t('available') : t('away')" :aria-pressed="away" @click="toggleManualAway"><Icon :name="away ? 'clock' : 'check'" :size="18" /></button>
+          <button type="button" class="mobile-voice-away" :class="{ active: away }" :title="away ? t('available') : t('away')" :aria-label="away ? t('available') : t('away')" :aria-pressed="away" @click="toggleManualAway"><Icon :name="away ? 'user-check' : 'user-clock'" :size="20" /></button>
           <button type="button" class="mobile-voice-leave" :aria-label="t('exit')" :title="t('exit')" @click="doDisconnect"><Icon name="door" :size="17" /></button>
         </div>
         <nav class="mobile-nav" data-ws-part="voice.mobile-nav" :aria-label="t('mobileNavigation')">

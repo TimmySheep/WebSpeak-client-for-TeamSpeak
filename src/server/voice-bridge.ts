@@ -470,7 +470,10 @@ export class VoiceBridge {
         });
         sendJson({ type: "channelList", channels: entry!.channelTree });
         if (wasReconnecting) sendJson({ type: "reconnected" });
-        scheduleMemberAvatarRefresh();
+        // Keep optional avatar lookups behind initial user actions so they do
+        // not compete with the first channel switch on TeamSpeak's command
+        // flood limiter.
+        scheduleMemberAvatarRefresh(1_500);
       };
 
       const resetDirectoryForReconnect = () => {
@@ -857,7 +860,9 @@ export class VoiceBridge {
           sendProtocolError(sendJson, "SESSION_NOT_READY", "TeamSpeak 会话尚未就绪");
           return;
         }
-        void handleCommand(entry!, command, sendJson);
+        void handleCommand(entry!, command, sendJson, (commandType, failureCode) => {
+          this.logger.warn({ entryId, commandType, failureCode }, "TeamSpeak client command failed");
+        });
       });
 
       ws.on("close", () => {
@@ -1766,6 +1771,7 @@ async function handleCommand(
   entry: WebClientEntry,
   command: ClientCommand,
   sendJson: (message: Record<string, unknown>) => void,
+  logOperationFailure: (commandType: string, failureCode: string) => void,
 ): Promise<void> {
   if (command.type === "latencyProbe") {
     const sequence = command.payload.sequence as string;
@@ -1797,6 +1803,7 @@ async function handleCommand(
         return;
       }
       const operation = classifyOperationError(error, "CHANNEL_SWITCH_FAILED", "频道切换失败");
+      logOperationFailure(command.type, operation.code);
       sendJson({ type: "error", requestId: command.requestId, error: { code: operation.code, message: operation.message, recoverable: false } });
       return;
     }
@@ -1874,6 +1881,8 @@ async function handleCommand(
       const muted = command.payload.muted as boolean;
       await entry.tsClient.setInputMuted(muted);
       entry.webrtc?.setMicrophoneMuted(muted);
+    } else if (command.type === "setOutputMuted") {
+      await entry.tsClient.setOutputMuted(command.payload.muted as boolean);
     } else if (command.type === "setAccompanimentActive") {
       entry.webrtc?.setAccompanimentActive(command.payload.active as boolean);
     } else if (command.type === "setMemberVolume") {
@@ -1883,6 +1892,7 @@ async function handleCommand(
     if (command.requestId) sendJson({ type: "commandCompleted", requestId: command.requestId });
   } catch (error: unknown) {
     const operation = classifyOperationError(error, "OPERATION_FAILED", "操作失败");
+    logOperationFailure(command.type, operation.code);
     sendJson({ type: "error", requestId: command.requestId, error: { code: operation.code, message: operation.message, recoverable: false } });
   }
 }

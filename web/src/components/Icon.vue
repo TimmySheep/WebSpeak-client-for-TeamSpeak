@@ -39,6 +39,18 @@
     <path v-else-if="name === 'headset'" d="M4 14v-2a8 8 0 0 1 16 0v2M4 14h3v5H5a1 1 0 0 1-1-1zm16 0h-3v5h2a1 1 0 0 1-1-1z" />
     <path v-else-if="name === 'volume'" d="M4 10v4h3l4 3V7l-4 3zm10.5-2.5a6 6 0 0 1 0 9m2-11a9 9 0 0 1 0 13" />
     <path v-else-if="name === 'volume-off'" d="m4 4 16 16M4 10v4h3l4 3V7l-4 3z" />
+    <template v-else-if="name === 'user-clock'">
+      <circle cx="8.5" cy="7" r="4" />
+      <path d="M2.5 21v-1.5A5.5 5.5 0 0 1 8 14h1a5.5 5.5 0 0 1 5.5 5.5V21" />
+      <circle cx="17.5" cy="16.5" r="4.25" fill="var(--surface-1)" />
+      <path d="M17.5 14v2.5l1.5 1" />
+    </template>
+    <template v-else-if="name === 'user-check'">
+      <circle cx="8.5" cy="7" r="4" />
+      <path d="M2.5 21v-1.5A5.5 5.5 0 0 1 8 14h1a5.5 5.5 0 0 1 5.5 5.5V21" />
+      <circle cx="17.5" cy="16.5" r="4.25" fill="var(--surface-1)" />
+      <path d="m15.7 16.5 1.2 1.2 2.5-2.5" />
+    </template>
     <template v-else-if="name === 'search'">
       <circle cx="10.8" cy="10.8" r="6.8" />
       <path d="m16 16 4.5 4.5" />

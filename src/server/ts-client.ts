@@ -20,6 +20,14 @@ import { describeTeamSpeakError, normalizeTeamSpeakError, normalizeTeamSpeakKick
 import { TeamSpeakAdapter, type TeamSpeakProtocol } from "./teamspeak-adapter.js";
 import type { TeamSpeakTarget } from "../domain/teamspeak-target.js";
 import { createAccelerationRelayClient, type AccelerationRelayClient, type AccelerationRelayOptions } from "./acceleration-relay.js";
+import {
+  createTeamSpeakCommandQueue,
+  retryTeamSpeakFlood,
+  TEAM_SPEAK_BOOTSTRAP_COMMAND_GAP_MS,
+  TeamSpeakInputMuteState,
+  TeamSpeakOutputMuteState,
+  waitForTeamSpeakCommand,
+} from "./teamspeak-command-policy.js";
 
 export interface TSClientOptions {
   target: TeamSpeakTarget;
@@ -86,7 +94,11 @@ export class TSClient extends EventEmitter {
   private readonly identity: Identity;
   private clientId = 0;
   private connected = false;
+  private connectionGeneration = 0;
   private preferredChannelId = 0n;
+  private readonly inputMuteState = new TeamSpeakInputMuteState();
+  private readonly outputMuteState = new TeamSpeakOutputMuteState();
+  private readonly controlCommandQueue = createTeamSpeakCommandQueue();
   private accelerationClient: AccelerationRelayClient | null = null;
   // Reason id of the most recent self leave, kept so the SDK `kicked` event can
   // tell a plain kick (4) from a kick with ban (5). The SDK only forwards the
@@ -100,6 +112,11 @@ export class TSClient extends EventEmitter {
   }
 
   async connect(): Promise<void> {
+    const generation = ++this.connectionGeneration;
+    this.connected = false;
+    this.inputMuteState.invalidate();
+    this.outputMuteState.invalidate();
+    const isNewClient = !this.adapter || !this.client;
     this.selfLeaveReasonId = null;
     if (!this.adapter || !this.client) {
       let transportTarget = this.options.target;
@@ -126,14 +143,33 @@ export class TSClient extends EventEmitter {
     const client = this.client;
 
     await adapter.connect();
+    const isCurrent = () => this.connectionGeneration === generation && this.adapter === adapter && this.client === client;
+    if (!isCurrent()) throw new Error("TeamSpeak session is not ready");
 
     this.clientId = client.clientID();
+    if (isNewClient) this.inputMuteState.assume(false);
+    if (isNewClient) this.outputMuteState.assume(false);
+
+    let lastBootstrapCommandAt = Date.now();
+    const runBootstrapCommand = async <T>(command: string, operation: () => Promise<T>): Promise<T> => {
+      const spacing = TEAM_SPEAK_BOOTSTRAP_COMMAND_GAP_MS - (Date.now() - lastBootstrapCommandAt);
+      if (spacing > 0) await waitForTeamSpeakCommand(spacing);
+      if (!isCurrent()) throw new Error("TeamSpeak session is not ready");
+      try {
+        return await retryTeamSpeakFlood(operation, isCurrent, waitForTeamSpeakCommand, (attempt, retryDelayMs) => {
+          this.logger.warn({ command, attempt, retryDelayMs, failureCode: "FLOOD_PROTECTION" }, "Retrying TeamSpeak command after flood protection");
+        });
+      } finally {
+        lastBootstrapCommandAt = Date.now();
+      }
+    };
+
     try {
       // A native TeamSpeak client subscribes to the complete channel tree
       // after the welcome sequence. Without this command the server only
       // exposes members in the current channel, so users disappear as soon as
       // they move elsewhere even though both clients are on the same server.
-      await client.execCommand("channelsubscribeall", 5000);
+      await runBootstrapCommand("channelsubscribeall", () => client.execCommand("channelsubscribeall", 5000));
     } catch (error: unknown) {
       this.logger.warn({
         err: error instanceof Error ? error.message : String(error),
@@ -150,16 +186,25 @@ export class TSClient extends EventEmitter {
     // snapshot through this same client protocol session so users who joined
     // earlier are visible immediately as well. Realtime events continue to
     // keep the snapshot current after this reconciliation.
+    let channels: Awaited<ReturnType<typeof tsListChannels>> | undefined;
+    let clients: Awaited<ReturnType<typeof tsListClients>> | undefined;
+    let snapshotError: unknown;
     try {
-      const [channels, clients] = await Promise.all([
-        tsListChannels(client),
-        tsListClients(client),
-      ]);
-      this.emit("directorySnapshot", { channels, clients });
+      channels = await runBootstrapCommand("channellist", () => tsListChannels(client));
     } catch (error: unknown) {
+      snapshotError = error;
+    }
+    try {
+      clients = await runBootstrapCommand("clientlist", () => tsListClients(client));
+    } catch (error: unknown) {
+      snapshotError ??= error;
+    }
+    if (channels && clients) {
+      this.emit("directorySnapshot", { channels, clients });
+    } else {
       this.logger.warn({
         failureCode: "DIRECTORY_SNAPSHOT_UNAVAILABLE",
-        failureDetail: error instanceof Error ? error.message : String(error),
+        failureDetail: snapshotError instanceof Error ? snapshotError.message : String(snapshotError),
       }, "TeamSpeak directory snapshot unavailable");
     }
 
@@ -168,7 +213,12 @@ export class TSClient extends EventEmitter {
       this.preferredChannelId = connectedChannelId;
     } else if (connectedChannelId !== this.preferredChannelId) {
       try {
-        await tsClientMove(client, this.clientId, this.preferredChannelId);
+        await retryTeamSpeakFlood(
+          () => tsClientMove(client, this.clientId, this.preferredChannelId),
+          isCurrent,
+          waitForTeamSpeakCommand,
+          (attempt, retryDelayMs) => this.logger.warn({ command: "clientmove", attempt, retryDelayMs, failureCode: "FLOOD_PROTECTION" }, "Retrying TeamSpeak command after flood protection"),
+        );
       } catch (error: unknown) {
         // The old channel may have been deleted or become inaccessible. The
         // SDK has already left us in the server/default channel, which is the
@@ -282,7 +332,10 @@ export class TSClient extends EventEmitter {
       } else {
         this.logger.info("TeamSpeak transport disconnected");
       }
+      this.connectionGeneration++;
       this.connected = false;
+      this.inputMuteState.invalidate();
+      this.outputMuteState.invalidate();
       this.clientId = 0;
       this.emit("disconnected", err);
     });
@@ -349,14 +402,53 @@ export class TSClient extends EventEmitter {
   }
 
   async setInputMuted(muted: boolean): Promise<void> {
-    if (!this.client || !this.connected) throw new Error("TeamSpeak session is not ready");
-    await this.client.execCommand(`clientupdate client_input_muted=${muted ? 1 : 0}`);
+    const client = this.client;
+    const adapter = this.adapter;
+    const generation = this.connectionGeneration;
+    if (!client || !adapter || !this.connected) throw new Error("TeamSpeak session is not ready");
+    const isCurrent = () => this.connectionGeneration === generation && this.client === client && this.adapter === adapter && this.connected;
+    await this.inputMuteState.sync(
+      muted,
+      this.controlCommandQueue,
+      () => client.execCommand(`clientupdate client_input_muted=${muted ? 1 : 0}`),
+      isCurrent,
+      waitForTeamSpeakCommand,
+      (attempt, retryDelayMs) => this.logger.warn({ command: "clientupdate", attempt, retryDelayMs, failureCode: "FLOOD_PROTECTION" }, "Retrying TeamSpeak command after flood protection"),
+    );
+  }
+
+  async setOutputMuted(muted: boolean): Promise<void> {
+    const client = this.client;
+    const adapter = this.adapter;
+    const generation = this.connectionGeneration;
+    if (!client || !adapter || !this.connected) throw new Error("TeamSpeak session is not ready");
+    const isCurrent = () => this.connectionGeneration === generation && this.client === client && this.adapter === adapter && this.connected;
+    await this.outputMuteState.sync(
+      muted,
+      this.controlCommandQueue,
+      () => client.execCommand(`clientupdate client_output_muted=${muted ? 1 : 0}`),
+      isCurrent,
+      waitForTeamSpeakCommand,
+      (attempt, retryDelayMs) => this.logger.warn({ command: "clientupdate", attempt, retryDelayMs, failureCode: "FLOOD_PROTECTION" }, "Retrying TeamSpeak command after flood protection"),
+    );
   }
 
   async switchChannel(channelId: bigint, password?: string): Promise<void> {
-    if (!this.client || !this.connected) return;
-    await tsClientMove(this.client, this.clientId, channelId, password);
-    this.preferredChannelId = channelId;
+    const client = this.client;
+    const adapter = this.adapter;
+    const generation = this.connectionGeneration;
+    if (!client || !adapter || !this.connected) return;
+    await this.controlCommandQueue(async () => {
+      const isCurrent = () => this.connectionGeneration === generation && this.client === client && this.adapter === adapter && this.connected;
+      if (!isCurrent()) throw new Error("TeamSpeak session is not ready");
+      await retryTeamSpeakFlood(
+        () => tsClientMove(client, this.clientId, channelId, password),
+        isCurrent,
+        waitForTeamSpeakCommand,
+        (attempt, retryDelayMs) => this.logger.warn({ command: "clientmove", attempt, retryDelayMs, failureCode: "FLOOD_PROTECTION" }, "Retrying TeamSpeak command after flood protection"),
+      );
+      this.preferredChannelId = channelId;
+    });
   }
 
   /** Move another visible TeamSpeak client; the server enforces both move powers. */
@@ -407,7 +499,10 @@ export class TSClient extends EventEmitter {
   }
 
   async disconnect(): Promise<void> {
+    this.connectionGeneration++;
     this.connected = false;
+    this.inputMuteState.invalidate();
+    this.outputMuteState.invalidate();
     this.selfLeaveReasonId = null;
     try {
       if (this.adapter) await this.adapter.disconnect();

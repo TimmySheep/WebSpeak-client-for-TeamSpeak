@@ -2328,6 +2328,7 @@ export function useVoiceWebSocket() {
         // as soon as the session is ready so a muted reconnect is visible to
         // native TeamSpeak users even before WebRTC negotiation completes.
         sendCmd("setMicrophoneMuted", { muted: microphoneMuted.value });
+        sendCmd("setOutputMuted", { muted: outputMuted.value });
         screenShareIceServers = normalizeScreenShareIceServers(msg.screenShareIceServers);
         applyWhisperState(msg.whisperTargetIds, msg.whisperActive);
         if (Array.isArray(msg.members)) {
@@ -2873,6 +2874,7 @@ export function useVoiceWebSocket() {
   function toggleOutputMute(): void {
     outputMuted.value = !outputMuted.value;
     applyOutputVolume();
+    sendCmd("setOutputMuted", { muted: outputMuted.value });
   }
 
   function setVoxThreshold(threshold: number): void {
